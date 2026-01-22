@@ -1,0 +1,239 @@
+---
+title: "Statistical Analysis of Healthcare Administration Data"
+author: "Edwin Ngungi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: journal
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+# Introduction
+
+Statistical analysis enables researchers to systematically examine complex data sets and extract information that can inform policy, planning, and operational decisions. This analysis uses R to examine hospital admission data.
+
+## Objectives
+The objectives of this study are to:
+
+1.  **Prepare Heterogeneous Data:** Standardize textual fields and convert time-related variables into appropriate date formats for valid analysis.
+
+2.  **Construct Analytical Variables:** Derive new metrics, specifically hospitalization duration and demographic cohorts, to enhance interpretation.
+
+3.  **Summarize Key Characteristics:** Use descriptive statistics to understand the central tendencies and dispersion of the data.
+
+4.  **Visualize Patterns:** Apply suitable graphical techniques to explore relationships between clinical conditions, financial charges, and operational metrics.
+
+5.  **Derive Insights:** Draw meaningful conclusions regarding hospital operations based on the observed statistical outputs.
+
+---
+
+# Methodology
+
+## Dataset Description
+The dataset used in this analysis consists of 55,500 anonymized hospital admission records. It contains a mix of qualitative and quantitative variables, including patient characteristics (Age, Gender), clinical classifications (Medical Condition, Admission Type), and financial charges (Billing Amount).
+
+## Statistical Methodology
+Data preparation involved standardizing textual fields to ensure internal consistency and converting time-related variables into appropriate date formats. A derived metric representing hospitalization duration was calculated using admission and discharge dates, allowing for meaningful comparison of patient stays.
+
+Variables representing categories were treated as factors for grouping, while continuous variables were retained for numerical analysis. Exploratory techniques were then applied using summary statistics and a variety of graphical tools—specifically bar charts, box plots, and time-series graphs—selected to reveal structure, variability, and potential associations within the data.
+
+---
+
+# Data Processing and Analysis
+
+```{r setup, message=FALSE, warning=FALSE}
+# Load libraries
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(gridExtra)
+# Data Ingestion
+# Note: Ensure the file path is correct for your local machine
+file_path <- "C:/Users/engungi/Downloads/HEALTH_DATASET.csv"
+df <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Statistical Transformations & Cleaning
+df_clean <- df %>%
+  mutate(
+    # Standardizing textual fields (Name) to Title Case
+    Name = str_to_title(Name),
+    
+    # Converting character dates to Date objects for calculation
+    Date.of.Admission = as.Date(Date.of.Admission, format = "%d/%m/%Y"),
+    Discharge.Date = as.Date(Discharge.Date, format = "%d/%m/%Y"),
+    
+    # Correcting data entry errors (negative billing amounts)
+    Billing.Amount = abs(Billing.Amount),
+    
+    # Deriving 'Length of Stay' to measure hospital occupancy
+    Length.of.Stay = as.numeric(Discharge.Date - Date.of.Admission),
+    
+    # Binning ages into groups for demographic comparison
+    Age.Group = cut(Age, 
+                    breaks = c(0, 20, 40, 60, 80, 100), 
+                    labels = c("0-20", "21-40", "41-60", "61-80", "81+")),
+    
+    # Extracting the admission year for trend analysis
+    Year = year(Date.of.Admission)
+  )
+```
+# Results and Discussion
+## Descriptive Statistics
+```{r}
+# Summary of quantitative variables
+kable(summary(df_clean %>% select(Age, Billing.Amount, Length.of.Stay)), 
+      caption = "Table 1: Descriptive Statistics of Key Metrics")
+```
+
+The summary statistics indicate a balanced demographic profile with a mean patient age of approximately 51.5 years. The average length of stay is 15.5 days, and the billing amounts show a wide distribution, suggesting varied treatment costs.
+
+## Categorical Feature Analysis
+This section explores the distribution of categorical variables including Gender, Blood Group, Medical Condition, and Admission Type.
+
+```{r categorical_visuals_final, echo=FALSE, message=FALSE, warning=FALSE, fig.width=12, fig.height=14}
+
+# --- Define a Common Theme for Consistency ---
+my_theme <- theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 11, face = "bold"),
+    legend.position = "none"
+  )
+
+# --- 1. Gender Pie Chart ---
+gender_data <- df_clean %>%
+  count(Gender) %>%
+  mutate(perc = n / sum(n) * 100,
+         label = paste0(Gender, "\n", round(perc, 1), "%"))
+
+p1 <- ggplot(gender_data, aes(x = "", y = perc, fill = Gender)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.5), size = 4, fontface = "bold") +
+  labs(title = "Gender Distribution", x = NULL, y = NULL) +
+  theme_void() +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none")
+
+# --- 2. Blood Groups Bar Chart ---
+blood_data <- df_clean %>%
+  count(Blood.Type) %>%
+  mutate(perc = n / sum(n) * 100)
+
+p2 <- ggplot(blood_data, aes(x = Blood.Type, y = perc, fill = Blood.Type)) +
+  geom_col() +
+  geom_text(aes(label = paste0(round(perc, 1), "%")), vjust = -0.5, size = 3.5) +
+  labs(title = "Blood Groups (%)", x = "Blood Type", y = "Percentage") +
+  my_theme
+
+# --- 3. Medical Condition Bar Chart (WITH COUNTS) ---
+# Calculate counts first to display labels
+med_counts <- df_clean %>% count(Medical.Condition)
+
+p3 <- ggplot(med_counts, aes(x = Medical.Condition, y = n, fill = Medical.Condition)) +
+  geom_col() +
+  geom_text(aes(label = n), vjust = -0.5, size = 3.5) + # Adds the count on top
+  labs(title = "Medical Condition Counts", x = "Condition", y = "Count") +
+  my_theme +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+# --- 4. Insurance Provider Bar Chart (WITH COUNTS) ---
+# Calculate counts first to display labels
+ins_counts <- df_clean %>% count(Insurance.Provider)
+
+p4 <- ggplot(ins_counts, aes(x = Insurance.Provider, y = n, fill = Insurance.Provider)) +
+  geom_col() +
+  geom_text(aes(label = n), vjust = -0.5, size = 3.5) + # Adds the count on top
+  labs(title = "Insurance Provider Counts", x = "Provider", y = "Count") +
+  my_theme +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+# --- 5. Admission Type Pie Chart ---
+admission_data <- df_clean %>%
+  count(Admission.Type) %>%
+  mutate(perc = n / sum(n) * 100,
+         label = paste0(Admission.Type, "\n", round(perc, 1), "%"))
+
+p5 <- ggplot(admission_data, aes(x = "", y = perc, fill = Admission.Type)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.5), size = 4, fontface = "bold") +
+  labs(title = "Admission Types", x = NULL, y = NULL) +
+  theme_void() +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none")
+
+# --- 6. Test Results Pie Chart ---
+test_data <- df_clean %>%
+  count(Test.Results) %>%
+  mutate(perc = n / sum(n) * 100,
+         label = paste0(Test.Results, "\n", round(perc, 1), "%"))
+
+p6 <- ggplot(test_data, aes(x = "", y = perc, fill = Test.Results)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.5), size = 4, fontface = "bold") +
+  labs(title = "Test Results Breakdown", x = NULL, y = NULL) +
+  theme_void() +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5), legend.position = "none")
+
+# --- OUTPUT: Arrange in a readable grid ---
+grid.arrange(p1, p5, p6, p2, p3, p4, ncol = 2)
+```
+
+## Operational Efficiency (Length of Stay)
+This section investigates whether specific medical conditions impose a higher burden on hospital bed capacity.
+
+```{r}
+# Aggregating Mean LOS by Condition
+avg_los <- df_clean %>%
+  group_by(Medical.Condition) %>%
+  summarise(Mean_LOS = mean(Length.of.Stay))
+
+# Visualization
+ggplot(avg_los, aes(x = Medical.Condition, y = Mean_LOS, fill = Medical.Condition)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = round(Mean_LOS, 1)), vjust = -0.5) +
+  labs(title = "Figure 2: Average Hospitalization Duration by Pathology",
+       x = "Medical Condition", y = "Mean Length of Stay (Days)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+Figure 2 illustrates the mean length of stay (LOS) stratified by medical condition. The data reveals a uniform distribution of hospitalization duration across all pathologies, with the average stay converging at approximately 15.5 days for conditions ranging from chronic Arthritis to acute Cancer. In a typical clinical setting, one would expect significant variance in LOS based on disease severity. The observed homogeneity here suggests that clinical pathology is not the primary driver of stay duration in this dataset.
+
+## Financial Analysis
+We analyzed the distribution of billing amounts to detect pricing disparities among insurance providers.
+
+```{r}
+# Boxplot for financial distribution
+ggplot(df_clean, aes(x = Insurance.Provider, y = Billing.Amount, fill = Insurance.Provider)) +
+  geom_boxplot() +
+  labs(title = "Figure 3: Distribution of Billing Charges by Payer",
+       x = "Insurance Provider", y = "Billing Amount ($)") +
+  theme_minimal() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+```
+The boxplot analysis in Figure 3 examines the variability of billing charges across major insurance providers. The results indicate a highly standardized cost structure, with the median billing amount and interquartile ranges appearing nearly identical for Blue Cross, Medicare, Aetna, Cigna, and UnitedHealthcare. 
+
+## Temporal Trends
+Annual admission volumes were plotted to assess hospital utilization trends over time.
+```{r}
+# Bar chart for temporal trends
+ggplot(df_clean, aes(x = Year)) +
+  geom_bar(fill = "#2c3e50", alpha = 0.8) +
+  labs(title = "Figure 4: Annual Patient Admissions", 
+       x = "Year", y = "Total Count") +
+  theme_minimal()
+```
+The annual admission volume, as depicted in Figure 4, demonstrates a stable demand for hospital services over the recorded period. There are no sudden spikes or significant seasonal cyclic patterns visible in the aggregate annual data. 
+
+# Conclusion
+The statistical examination of the healthcare dataset reveals distinct patterns in hospital operations. The analysis successfully standardized the heterogeneous data inputs and derived critical performance metrics.
+
+**Key Findings:**
+
+**Uniformity:** Visual evidence indicates a uniform distribution in both length of stay and billing amounts across different medical conditions and insurance providers.
+
+**Financial Equity**: Billing practices appear consistent across all insurance providers, with no significant outliers attributed to specific payers.
+
