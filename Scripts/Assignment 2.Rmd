@@ -1,0 +1,296 @@
+---
+title: "Assignment 2"
+author: "Edwin Ngungi"
+date: "2026-03-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Question 1
+
+## 1a. Use the descriptives file to assign labels/categories to all the categorical variables in the data.
+```{r}
+# Load datasets
+
+data <- read.csv("C:/Users/engungi/OneDrive - Retirement Benefit Authority/Desktop/Classes/Masters/Yr1 Sem 2/STA 8204 - Computational Statistics/STAT_8202_Computational-Statistics/Data/contraceptive_data.csv")
+
+# 1a. Assign labels to categorical variables
+data$wife_edu <- factor(data$wife_edu, levels = 1:4, labels = c("Low", "Level 2", "Level 3", "High"))
+data$hus_edu  <- factor(data$hus_edu, levels = 1:4, labels = c("Low", "Level 2", "Level 3", "High"))
+data$num_child <- factor(data$num_child, levels = 1:4, labels = c("0", "1-2", "3-4", "5+"))
+data$wife_rel <- factor(data$wife_rel, levels = 0:1, labels = c("Non-Islam", "Islam"))
+data$con_method <- factor(data$con_method, levels = 1:3, labels = c("No-use", "Long-term", "Short-term"))
+print(head(data))
+```
+## 1.b Between wives and husbands, who are more educated?
+```{r}
+wife_edu_pct <- prop.table(table(data$wife_edu)) * 100
+husb_edu_pct <- prop.table(table(data$hus_edu)) * 100
+
+# Print results rounded to 2 decimal places for neatness
+print("Wife Education Levels (%):")
+round(wife_edu_pct, 2)
+
+print("Husband Education Levels (%):")
+round(husb_edu_pct, 2)
+```
+Husbands are more educated the wives, a higher percentage are highly educated while a lower percentage have a lower level of education.
+
+## 1.c How many women have given birth to more than 4 children?
+```{r}
+count_gt4 <- sum(data$num_child == "5+", na.rm = TRUE)
+print(paste("Number of women with > 4 children:", count_gt4))
+```
+## 1d. Describe the distribution of wife’s age
+```{r}
+hist(data$wife_age, col="blue", main="Distribution of Wife's Age", 
+     xlab="Age", border="red")
+```
+
+
+The distribution of wives’ ages is right‑skewed (positively skewed), with most women concentrated in the mid‑20s to early 30s.
+
+## 1e. show and comment on the relationship of contraceptive usage
+and religion.
+
+```{r}
+# Plot the mosaic with specific colors
+plot(data$wife_rel, data$con_method, 
+     main="Contraceptive Usage vs Religion", 
+     xlab="Religion", ylab="Usage Type", 
+     col=c("green", "blue", "gray"))
+
+# Add a legend to define the colors clearly
+legend("topright", 
+       legend = c("No-use", "Long-term", "Short-term"), 
+       fill = c("green", "blue", "gray"), 
+       cex = 0.8)
+```
+
+
+Non-Islam women seem to prefer more long term use of contraceptives compared to Islam women who are show a higher rate of no usage and short-term forms of contraceptives.
+
+## 1f. What is the median age of using short-term contraceptive methods? How does this compare to those who have never used contraceptives?
+```{r}
+median_short <- median(data$wife_age[data$con_method == "Short-term"])
+median_none <- median(data$wife_age[data$con_method == "No-use"])
+print(paste("Median Age (Short-term):", median_short))
+print(paste("Median Age (No-use):", median_none))
+```
+## 1g. Add any additional visualization to explore the data.
+
+```{r}
+# Boxplot to see age distribution across contraceptive methods
+boxplot(data$wife_age ~ data$con_method, 
+        main="Wife's Age vs. Contraceptive Method",
+        xlab="Contraceptive Method", 
+        ylab="Wife's Age",
+        col=c("lightgreen", "lightblue", "lightgray"))
+```
+
+
+The chart suggests that younger women prefer short-term options, while older women tend to opt for long-term contraceptive solutions.
+
+# Question 2:  Calculate the empirical CDF of the number of children
+
+```{r}
+counts <- table(data$num_child)
+probs <- prop.table(counts)
+cum_probs <- cumsum(probs) 
+
+# --- Step 2: Inverse Transform Function ---
+inverse_transform <- function(n_samples, cumulative_distribution) {
+  # Generate n uniform random numbers
+  u <- runif(n_samples)
+  
+  # Map U to the categories based on cum_probs
+  # findInterval returns the index where U falls in the CDF steps
+  samples <- findInterval(u, c(0, cumulative_distribution), all.inside = TRUE)
+  return(samples)
+}
+
+# --- Step 3: Generate Samples ---
+set.seed(453) 
+n <- nrow(data) 
+simulated_data <- inverse_transform(n, cum_probs)
+
+# --- Step 4: Comparison ---
+original_props <- probs
+simulated_props <- prop.table(table(simulated_data))
+
+print("Original Data Proportions:")
+print(original_props)
+print("Simulated Data Proportions:")
+print(simulated_props)
+```
+The simulated percentages are very close to the original data proportions. This indicates that the Inverse Transform Method was successful in replicating the distribution of the original dataset
+
+#  Question 3, Monte Carlo Estimation
+## 3a. 
+```{r}
+# 1. Define the number of MC simulations
+m <- 10000 
+set.seed(123)
+
+# 2. Generate samples using the Empirical Distribution
+mc_samples <- inverse_transform(m, cum_probs)
+
+# 3. Apply the indicator function: 1 if category is 3, else 0
+hits <- ifelse(mc_samples == 3, 1, 0)
+
+# 4. Calculate the MC Estimate (Mean of indicators)
+theta_hat <- mean(hits)
+
+# 5. Calculate True Proportion from original data for comparison
+true_prop <- prop.table(table(data$num_child))["3-4"]
+
+print(paste("Monte Carlo Estimate:", round(theta_hat, 4)))
+print(paste("True Proportion:", round(true_prop, 4)))
+
+```
+
+
+The Monte Carlo estimate of 0.2581 is nearly identical to the true proportion of 0.2569, meaning that the simulation successfully replicated the original data distribution.
+
+## 3b.
+```{r}
+
+# 1. Standard Error calculation
+se <- sqrt((theta_hat * (1 - theta_hat)) / m)
+
+# 2. 95% CI bounds
+ci_lower <- theta_hat - (1.96 * se)
+ci_upper <- theta_hat + (1.96 * se)
+
+# 3. Plotting 
+plot(1, theta_hat, ylim=c(ci_lower - 0.05, ci_upper + 0.05), xlim=c(0, 2),
+     main="MC Estimate with 95% Confidence Interval",
+     xlab="", ylab="Probability Estimate", xaxt='n', pch=19, col="blue")
+arrows(1, ci_lower, 1, ci_upper, angle=90, code=3, length=0.1, lwd=2)
+abline(h=true_prop, col="red", lty=2) # True value line
+legend("topright", legend=c("MC Estimate", "95% CI", "True Value"), 
+       col=c("blue", "black", "red"), pch=c(19, NA, NA), lty=c(NA, 1, 2))
+```
+
+
+Since the true value falls within the black error bars (95% confidence interval), the results are statistically reliable and the estimation method is successful.
+
+
+# Question 4
+## 4a. Find the maximum reproductive age of a woman.
+
+```{r}
+# Coefficients from the equation y = -2.6 + 0.2x - 0.0008x^2
+a_coeff <- -0.0008
+b_coeff <- 0.2
+max_reproductive_age <- -b_coeff / (2 * a_coeff)
+
+# Display the result
+print(max_reproductive_age)
+```
+
+
+The maximum reproductive age of a woman as per the equation is 125 years.
+
+
+## 4b. Compute the average number of children for a woman in a specific age.
+
+```{r}
+# Define the function
+f_children <- function(x) { -2.6 + 0.2*x - 0.0008*x^2 }
+
+# Select specific ages to showcase the results
+milestone_ages <- c(20, 25, 30, 35, 40, 45, 50)
+
+# Compute averages
+avg_values <- f_children(milestone_ages)
+
+# Create and print a simple table
+results_table <- data.frame(Age = milestone_ages, 
+                            Average_Children = round(avg_values, 2))
+print(results_table)
+```
+
+
+## 4c. Plot the values obtained in (b) against age of the women. Add a dotted line on the plot to show the value obtained in (a).
+
+```{r}
+# Create the plot
+# 1. Define the function and age range
+f_children <- function(x) { -2.6 + 0.2*x - 0.0008*x^2 }
+plot_ages <- seq(15, 130, by = 1)
+expected_y <- f_children(plot_ages)
+
+# 2. Define the theoretical maximum age found in (a)
+max_age_val <- 125
+
+plot(plot_ages, expected_y, type = "l", col = "blue", lwd = 2,
+     main = "Expected Number of Children vs. Woman's Age",
+     xlab = "Age of Woman", ylab = "Average Number of Children")
+
+# 4. Add the dotted vertical line for the maximum reproductive age
+abline(v = max_age_val, col = "red", lty = 3)
+
+# 5. Add a legend or label to explain the red line
+legend("topleft", legend = c("Expected Children", "Max Reproductive Age (125)"),
+       col = c("blue", "red"), lty = c(1, 3), lwd = c(2, 1), cex = 0.8)
+```
+
+
+
+# Question 5
+## Question 5a. State the formula for estimating the probability of a woman ever used a contraceptive givenher education and number of children.
+
+The probability $\pi_i$ that a woman has "ever used" a contraceptive, given her education ($x_1$) and number of children ($x_2$), is defined by the logistic function: $$\pi_i = P(y_i=1 | x_{i1}, x_{i2}) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 x_{i1} + \beta_2 x_{i2})}}$$In logit form, this is expressed as:$$\ln\left(\frac{\pi_i}{1 - \pi_i}\right) = \beta_0 + \beta_1 x_{i1} + \beta_2 x_{i2}$$
+
+## b. Derivation of the Likelihood Function
+
+Since the outcome is binary, we assume $y_i$ follows a Bernoulli distribution.  The likelihood function $L(\beta)$ for $n$ observations is the product of these individual probabilities:
+$$L(\beta) = \prod_{i=1}^{n} \pi_i^{y_i} (1 - \pi_i)^{1-y_i}$$To simplify the optimization, we use the Log-Likelihood ($l(\beta)$):$$l(\beta) = \sum_{i=1}^{n} [y_i \ln(\pi_i) + (1-y_i) \ln(1-\pi_i)]$$
+
+## c. Newton-Raphson Update Step
+
+The Newton-Raphson method is an iterative algorithm used to find the maximum of the log-likelihood function.  The update expression is:
+$$\beta^{(k+1)} = \beta^{(k)} - \mathbf{H}(\beta^{(k)})^{-1} \nabla l(\beta^{(k)})$$Where:$\beta^{(k)}$ is the vector of coefficients at iteration $k$.$\nabla l(\beta)$ is the Gradient (vector of first derivatives).$\mathbf{H}(\beta)$ is the Hessian (matrix of second derivatives), which in logistic regression is $-X^T W X$, where $W$ is a diagonal matrix of weights $\pi_i(1-\pi_i)$.
+
+## 5d: Implementation of the Newton-Raphson update step
+
+```{r}
+# Prepare binary outcome: 1 if Ever-used, 0 if No-use
+data$ever_used <- ifelse(data$con_method == "No-use", 0, 1)
+
+# Fit the logistic regression model
+# Treating education and children as numeric for the regression
+logit_model <- glm(ever_used ~ as.numeric(wife_edu) + as.numeric(num_child),
+                   data = data, 
+                   family = binomial(link = "logit"))
+summary(logit_model)
+```
+
+
+## 5e. Comment on Logistic Regression Results
+
+The model shows that both wife’s education and the number of children are significant predictors of contraceptive adoption, as indicated by the very small p-values. The positive coefficients (0.57 for education and 0.43 for number of children) mean that as a woman's education level or number of children increases, the probability of her having ever used contraceptives also increases.
+
+# Question 6
+
+## 6a. Why Newton-Raphson and Golden Search Fail
+The main reason these methods don't work here is because of the absolute value ($|\beta_i|$) in the penalty part of the formula.Newton-Raphson needs to calculate "slopes" (derivatives) to find the best answer. But an absolute value has a sharp "V" shape at zero, and you can't calculate a slope at a sharp corner.Golden Search is designed for much simpler problems with only one variable, whereas this model is trying to solve for many variables at once.
+
+## Other Optimization Methods
+
+Since the standard ways fail, we use methods that can handle those sharp corners, such as:
+
+Coordinate Descent: This looks at one variable at a time to find the best fit. 
+
+Proximal Gradient Methods: These are specifically designed to "jump over" the corners that trip up Newton-Raphson.
+
+### 6b. The Meaning of $\lambda$ and $\alpha$
+
+$\lambda$ (Lambda): This controls the overall "penalty." If it’s high, the model stays simple and avoids overfitting. If it's low, the model is more complex.
+
+$\alpha$ (Alpha): This decides the type of penalty.If $\alpha$ is 1, it's like a Lasso, which can turn off unnecessary variables completely (setting them to zero).If $\alpha$ is 0, it's like Ridge, which keeps all variables but makes them very small.
+

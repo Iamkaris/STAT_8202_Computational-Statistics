@@ -1,0 +1,142 @@
+---
+title: "Analysis of Ischemic Heart Disease Costs"
+author: "Group 1"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+```{r}
+# Load necessary libraries
+library(tidyverse) 
+library(broom)     
+library(car)        
+library(GGally)     # 
+
+# Set global options for chunks
+knitr::opts_chunk$set(echo = TRUE, fig.width = 8, fig.height = 5)
+```
+
+
+
+```{r}
+# Define the column names based on the textbook appendix
+variable_names <- c("ID", "TotalCost", "Age", "Gender", "Interventions", 
+                   "Drugs", "ERVisits", "Complications", "Comorbidities", "Duration")
+
+# Load the data
+# Note: Ensure APPENC09.txt is in your working directory
+# We use read_table as it handles multiple spaces between columns
+heart_data <- read_table("C:/Users/engungi/Downloads/APPENC09.txt", col_names = variable_names, comment = "[")
+
+# Basic Data Cleaning
+heart_data <- heart_data %>%
+  mutate(Gender = as.factor(Gender)) %>% # Set Gender as a categorical factor
+  filter(!is.na(TotalCost))             # Ensure no empty rows were imported
+
+# Preview the data
+print(head(heart_data))
+```
+
+
+This report analyzes a dataset of 788 subscribers who made claims related to Ischemic Heart Disease between January 1, 1998, and December 31, 1999. Our primary goal is to model the Total Cost of services as a response variable to understand which factors most significantly drive medical expenses.
+
+## Numerical Summaries
+This chunk provides a summary of the data, showing the range, mean, and any missing values.
+
+```{r}
+# Get descriptive statistics for all variables
+print(summary(heart_data))
+
+# Total count of NAs in each column
+heart_data %>%
+  summarise(across(everything(), ~ sum(is.na(.))))
+
+# Check the structure to ensure data types are correct
+print(str(heart_data))
+```
+
+## 2. Visualizing the Response Variable (Total Cost)
+
+```{r}
+# Histogram of Total Cost
+ggplot(heart_data, aes(x = TotalCost)) +
+  geom_histogram(fill = "steelblue", color = "white", bins = 30) +
+  labs(title = "Distribution of Total Medical Costs",
+       x = "Total Cost (Dollars)",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+Positive Skew: The data is heavily right-skewed (positively skewed), with a massive clump of observations near the zero-to-low dollar range and a very long tail extending toward high costs.
+
+Frequency Breakdown: The majority of the 788 subscribers incurred relatively low costs (under $\$5,000$), but a small number of "high-cost" patients incurred claims exceeding $\$20,000$, with some reaching over $\$40,000$.
+
+
+## 3. Bivariate Analysis: Relationships with Cost
+
+```{r}
+# Correlation matrix for continuous variables
+# We exclude ID and Gender (since Gender is a factor)
+heart_data %>%
+  select(TotalCost, Age, Interventions, Drugs, ERVisits, 
+         Complications, Comorbidities, Duration) %>%
+  cor() %>%
+  round(2)
+```
+
+
+Primary Predictor (Interventions): There is a strong positive correlation (r = 0.73) between the number of interventions and the total cost. This suggests that medical procedures are the dominant factor in expense variance.
+
+
+Secondary Predictors: ER Visits (r = 0.38) shows a moderate positive relationship with cost, indicating that emergency care significantly adds to the total.
+
+
+Weak/Surprising Relationships: * Age (r = -0.06) has an almost negligible (and slightly negative) correlation with cost. This implies that in this specific subscriber group, age is not a primary driver of claim size.
+
+
+Comorbidities (r = 0.15) and Duration (r = 0.18) show surprisingly weak linear relationships with cost, suggesting they may only be significant in combination with other factors.
+
+
+Multicollinearity Warning: The correlation between Drugs and ER Visits (r = 0.53). While not high enough to be dangerous yet, it’s a signal to check the Variance Inflation Factor (VIF)
+
+
+```{r}
+# Create a matrix of plots for numerical variables
+# We exclude ID and the categorical Gender for now
+heart_data %>%
+  select(TotalCost, Age, Interventions, Drugs, ERVisits, 
+         Complications, Comorbidities, Duration) %>%
+  ggpairs(
+    lower = list(continuous = wrap("points", alpha = 0.3, size=0.5)),
+    diag = list(continuous = wrap("densityDiag", fill="#4682B4", alpha=0.5)),
+    title = "Relationships Between Numerical Variables"
+  )
+```
+
+For Categorical Variables
+
+
+```{r}
+# Boxplot of Cost by Gender
+ggplot(heart_data, aes(x = factor(Gender), y = TotalCost, fill = factor(Gender))) +
+  geom_boxplot(alpha = 0.7) +
+  scale_fill_manual(values = c("salmon", "skyblue"), labels = c("Female", "Male")) +
+  labs(title = "Total Cost Distribution by Gender", x = "Gender (0=Female, 1=Male)", y = "Cost ($)") +
+  theme_minimal() +
+  guides(fill = "none")
+```
+
+
+```{r}
+# Fit the full linear model
+# Y = TotalCost, X = all other variables except ID
+model_full <- lm(TotalCost ~ . - ID, data = heart_data)
+
+# Summary of the model
+summary(model_full)
+```
+
+

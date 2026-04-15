@@ -1,0 +1,242 @@
+---
+title: "Computational Statistics Assignment 1"
+author: "Edwin Ngungi - 224082"
+date: "2026-02-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1: Monte Carlo Integration
+### 1.1 Estimation of Theta
+
+```{r q1-estimation}
+set.seed(42)
+
+# Define the function to be integrated
+f <- function(x) {
+  x^2 * exp(-x)
+}
+
+# Parameters
+n <- 10000  # Sample size
+a <- 0      # Lower bound
+b <- 2      # Upper bound
+
+# Step 1: Generate random samples from Uniform(0, 2)
+u <- runif(n, min = a, max = b)
+
+# Step 2: Evaluate the function at these points
+samples <- f(u)
+
+# Step 3: Estimate theta
+# Formula: (b - a) * average(f(u))
+theta_hat <- (b - a) * mean(samples)
+theta_hat
+```
+### 1.2 Monte Carlo Standard Error and Confidence Interval
+```{r}
+# Calculate values of f(u)
+f_u <- f(u)
+
+# Standard Error calculation
+
+mc_se <- (b - a) * sd(f_u) / sqrt(n)
+
+# 95% Confidence Interval
+alpha <- 0.05
+z_crit <- qnorm(1 - alpha/2)
+ci_lower <- theta_hat - z_crit * mc_se
+ci_upper <- theta_hat + z_crit * mc_se
+
+cat("Monte Carlo SE:", mc_se, "\n")
+cat("95% CI: [", ci_lower, ",", ci_upper, "]\n")
+```
+###1.3 Accuracy and Comparison
+```{r}
+# Exact value using R's numerical integration
+exact_val <- integrate(f, 0, 2)$value
+
+# Absolute error
+abs_error <- abs(theta_hat - exact_val)
+
+cat("Analytical Value:", exact_val, "\n")
+cat("MC Estimate:", theta_hat, "\n")
+cat("Absolute Error:", abs_error, "\n")
+```
+## Question 2: Exponential Distribution Simulation
+
+### 2.1 Estimating P(2 < T < 5)
+```{r q2-simulation}
+set.seed(123)
+
+# Parameters
+n <- 10000
+lambda <- 0.4
+
+# Step 1: Generate lifetimes from Exponential(0.4)
+lifetimes <- rexp(n, rate = lambda)
+
+# Step 2: Identify lifetimes between 2 and 5 years
+# This creates a logical vector (TRUE/FALSE)
+successes <- (lifetimes > 2) & (lifetimes < 5)
+
+# Step 3: Calculate the proportion
+prob_estimate <- mean(successes)
+prob_estimate
+```
+### 2.2 Stability of the Estimate
+To observe how the estimate stabilizes, we repeat the simulation for sample sizes of 1,000, 5,000, and 10,000.
+```{r}
+set.seed(42)
+lambda <- 0.4
+
+# Define a function to calculate the estimate for a given n
+estimate_prob <- function(n_size) {
+  sim_data <- rexp(n_size, rate = lambda)
+  mean(sim_data > 2 & sim_data < 5)
+}
+
+# Define the sample sizes requested in the assignment
+sample_sizes <- c(1000, 5000, 10000)
+
+# Run the simulation for each size
+results <- sapply(sample_sizes, estimate_prob)
+
+# Create a clean table to display the results
+stability_table <- data.frame(
+  n = sample_sizes,
+  MC_Estimate = results
+)
+
+print(stability_table)
+```
+We observe that the estimates do not follow a linear trend (downward or upward), but rather fluctuate around a central value. As $n$ increases, the magnitude of these fluctuations decreases, leading to a more stable and accurate estimate.
+
+### 2.3 Comparison with Theoretical Probability
+The theoretical probability for an Exponential distribution $P(a < T < b)$ is calculated as $F(b) - F(a)$.
+```{r}
+# Define parameters
+lambda <- 0.4
+a <- 2
+b <- 5
+
+# Calculate theoretical probability using the CDF (pexp)
+theoretical_prob <- pexp(b, rate = lambda) - pexp(a, rate = lambda)
+print(theoretical_prob)
+```
+The theoretical probability is approximately 0.3139937. As the $n$ value increases, the Monte-Carlo estimate gets closer to the theoretical value.
+
+## Question 3: Estimating Integrals over Infinite Limits
+
+### 3.1 Naive Monte Carlo
+We approximate the infinite limit with a large finite value $M=20$.
+```{r q3-naive}
+set.seed(42)
+n <- 10000
+M <- 20
+u <- runif(n, 0, M)
+
+# Estimate = (Width) * Average of f(u)
+theta_naive <- M * mean(u * exp(-u))
+theta_naive
+```
+### 3.2 Importance Sampling
+
+```{r}
+set.seed(42)
+# 1. Generate samples from Exponential(1)
+x_is <- rexp(n, rate = 1)
+
+# 2. Calculate weights: f(x)/g(x) = (x * exp(-x)) / exp(-x) = x
+weights <- x_is
+
+# 3. The estimate is the mean of the weights
+theta_is <- mean(weights)
+theta_is
+```
+### 3.3 Comparison of Variance and Efficiency
+```{r}
+# 1. Variance of the Naive Estimator
+# We must scale the variance by M^2 because theta_naive = M * mean(f(u))
+var_naive <- M^2 * var(u * exp(-u)) / n
+
+# 2. Variance of the Importance Sampling Estimator
+var_is <- var(weights) / n
+
+# 3. Efficiency Ratio
+
+efficiency_ratio <- var_naive / var_is
+
+cat("Variance (Naive):", var_naive, "\n")
+cat("Variance (Importance Sampling):", var_is, "\n")
+```
+This is because Importance Sampling uses a proposal distribution that mimics the target function's behavior, concentrating samples in regions that contribute most to the integral. This reduces the variability of the individual estimates, leading to a more efficient and stable estimator.
+
+
+# Question 4: Rare Event Estimation
+
+### 4.1 Naive Monte Carlo Simulation
+We attempt to estimate the probability $P(X > 4)$ for a standard normal variable $X \sim N(0, 1)$.
+
+```{r}
+set.seed(42)
+n <- 10000
+
+# Draw from Standard Normal
+x_naive <- rnorm(n, mean = 0, sd = 1)
+
+# Count how many are > 4
+prob_naive <- mean(x_naive > 4)
+prob_naive
+```
+### 4.2 Importance Sampling with a Shifted Normal Proposal
+To estimate $P(X > 4)$ more accurately, we sample from a proposal distribution $g(x) \sim N(4, 1)$.
+```{r}
+set.seed(42)
+n <- 10000
+
+# 1. Generate samples from the Proposal Distribution N(4, 1)
+x_is <- rnorm(n, mean = 4, sd = 1)
+
+# 2. Calculate the weights: f(x) / g(x)
+# f(x) = dnorm(x, 0, 1) [Target]
+# g(x) = dnorm(x, 4, 1) [Proposal]
+weights <- dnorm(x_is, mean = 0, sd = 1) / dnorm(x_is, mean = 4, sd = 1)
+
+# 3. Estimate the probability
+# We multiply the weight by an indicator (x > 4)
+prob_is <- mean(weights * (x_is > 4))
+
+cat("Importance Sampling Estimate:", prob_is)
+```
+### 4.3 Comparison and Discussion of Results
+```{r}
+# 1. THE TRUTH (for comparison)
+theoretical_p <- pnorm(4, lower.tail = FALSE)
+
+# 2. CALCULATE BIAS (How far are we from the truth?)
+# Bias = Estimate - Truth
+bias_naive <- prob_naive - theoretical_p
+bias_is    <- prob_is - theoretical_p
+
+# 3. CALCULATE VARIANCE (How "shaky" is the estimate?)
+# For Naive: Variance of the TRUE/FALSE hits
+var_naive <- var(x_naive > 4) / n
+
+# For IS: Variance of the Weights
+var_is    <- var(weights * (x_is > 4)) / n
+
+# 4. RESULTS TABLE
+summary_table <- data.frame(
+  Metric   = c("Estimate", "Bias", "Variance"),
+  Naive    = c(prob_naive, bias_naive, var_naive),
+  Imp_Samp = c(prob_is, bias_is, var_is)
+)
+
+print(summary_table)
+```
+Importance Sampling is preferable because it achieves a level of precision that is not possible by Naive Monte Carlo at the same sample size. With a variance that is lower and a bias that is close to zero.
+
